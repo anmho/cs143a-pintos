@@ -24,6 +24,9 @@ static int64_t ticks;
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
 
+//stores all the processes that are asleep
+static struct list sleep_queue;
+
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
@@ -37,6 +40,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  list_init(&sleep_queue);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -86,16 +91,24 @@ timer_elapsed (int64_t then)
 
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
+//calculate wake time 
+//add thread to sleep queue and sort based on smallest wake time to largest
+//pop out threads that are ready to wake up
 void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
   
+  //when the thread should wake up
+  int64_t wakeup_time = ticks + timer_ticks;
+
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  // while (timer_elapsed (start) < ticks) 
+  //   thread_yield (); //thread is giving up its time on cpu to let other threads use it 
+
+  alarmClock(wakeup_time);
+  
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -121,6 +134,47 @@ timer_nsleep (int64_t ns)
 {
   real_time_sleep (ns, 1000 * 1000 * 1000);
 }
+
+
+//less function for list_insert_ordered
+static bool sleep_queue_less(struct list_elem *x, struct list_elem *y){
+  ASSERT(x != NULL);
+  ASSERT(y != NULL);
+
+  //converts the list_elem to its enclosing structure 
+  //details found in list.h
+  struct thread *thread1 = list_entry(x, struct thread, elem);
+  struct thread *thread2 = list_entry(y, struct thread, elem);
+
+  //compares the wakeup times 
+  return thread1->time_to_wakeup < thread2->time_to_wakeup;
+}
+
+
+void alarmClock(int64_t wakeup_time){
+
+  //if it's already time to wakeup, then break 
+  if (wakeup_time <= 0){
+    return;
+  }
+
+  struct thread *currThread = thread_current();
+
+  //gets the prev interrupt level before disable so that 
+  //when you reenable the original interrupt level is restored
+  enum intr_level prevLevel = intr_disable();
+
+  //stores the time when to wakeup on the curr thread 
+  //so that it is saved while on the sleep queue
+  currThread->time_to_wakeup =  wakeup_time;
+
+  list_insert_ordered(&sleep_queue, &currThread->elem, sleep_queue_less, NULL);
+  thread_block();
+  intr_set_level(prevLevel);
+
+}
+
+
 
 /* Busy-waits for approximately MS milliseconds.  Interrupts need
    not be turned on.
