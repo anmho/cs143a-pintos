@@ -89,6 +89,22 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+
+//less function for list_insert_ordered
+static bool sleep_queue_less(struct list_elem *x, struct list_elem *y){
+  ASSERT(x != NULL);
+  ASSERT(y != NULL);
+
+  //converts the list_elem to its enclosing structure 
+  //details found in list.h
+  struct thread *thread1 = list_entry(x, struct thread, elem);
+  struct thread *thread2 = list_entry(y, struct thread, elem);
+
+  //compares the wakeup times 
+  return thread1->time_to_wakeup < thread2->time_to_wakeup;
+}
+
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 //calculate wake time 
@@ -107,7 +123,24 @@ timer_sleep (int64_t ticks)
   // while (timer_elapsed (start) < ticks) 
   //   thread_yield (); //thread is giving up its time on cpu to let other threads use it 
 
-  alarmClock(wakeup_time);
+  //if it's already time to wakeup, then break 
+  if (wakeup_time <= 0){
+    return;
+  }
+
+  struct thread *currThread = thread_current();
+
+  //gets the prev interrupt level before disable so that 
+  //when you reenable the original interrupt level is restored
+  enum intr_level prevLevel = intr_disable();
+
+  //stores the time when to wakeup on the curr thread 
+  //so that it is saved while on the sleep queue
+  currThread->time_to_wakeup =  wakeup_time;
+
+  list_insert_ordered(&sleep_queue, &currThread->elem, sleep_queue_less, NULL);
+  thread_block();
+  intr_set_level(prevLevel);
   
 }
 
@@ -136,43 +169,44 @@ timer_nsleep (int64_t ns)
 }
 
 
-//less function for list_insert_ordered
-static bool sleep_queue_less(struct list_elem *x, struct list_elem *y){
-  ASSERT(x != NULL);
-  ASSERT(y != NULL);
+//when it is time to wake up a thread and pop from the sleep queue 
+void 
+timer_wakeup(){
+  int64_t current_time = timer_ticks ();
 
-  //converts the list_elem to its enclosing structure 
-  //details found in list.h
-  struct thread *thread1 = list_entry(x, struct thread, elem);
-  struct thread *thread2 = list_entry(y, struct thread, elem);
-
-  //compares the wakeup times 
-  return thread1->time_to_wakeup < thread2->time_to_wakeup;
-}
-
-
-void alarmClock(int64_t wakeup_time){
-
-  //if it's already time to wakeup, then break 
-  if (wakeup_time <= 0){
+  //if there are no threads in the sleep queue exit 
+  if (list_empty(&sleep_queue)){
     return;
   }
 
-  struct thread *currThread = thread_current();
+  //get the head of the list 
+  struct list_elem *curr = list_begin(&sleep_queue);
 
-  //gets the prev interrupt level before disable so that 
-  //when you reenable the original interrupt level is restored
-  enum intr_level prevLevel = intr_disable();
+  //keep going to continously check if 
+  //a thread is ready to wakeup
+  while (curr != list_end(&sleep_queue)){
+    //have to store next because you remove curr 
+    struct list_elem *next = list_next(curr);
 
-  //stores the time when to wakeup on the curr thread 
-  //so that it is saved while on the sleep queue
-  currThread->time_to_wakeup =  wakeup_time;
+    struct thread *currThread = list_entry(curr, struct thread, elem);
 
-  list_insert_ordered(&sleep_queue, &currThread->elem, sleep_queue_less, NULL);
-  thread_block();
-  intr_set_level(prevLevel);
 
+    //if it is time to wakeup unblock the thread in the sleep queue 
+    if (currThread->time_to_wakeup < current_time && currThread->time_to_wakeup == 0){
+
+      //always have to disable interrrupt before block/unblock
+      enum intr_level prevLevel = intr_disable();
+      list_remove(curr);
+      thread_unblock(currThread);
+      intr_set_level(prevLevel);
+    }
+
+    curr = next;
+
+  }
 }
+
+
 
 
 
