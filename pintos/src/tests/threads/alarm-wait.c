@@ -15,6 +15,7 @@ static void test_sleep (int thread_cnt, int iterations);
 void
 test_alarm_single (void) 
 {
+  //runs 5 threads for 1 iteration
   test_sleep (5, 1);
 }
 
@@ -94,13 +95,17 @@ test_sleep (int thread_cnt, int iterations)
     }
   
   /* Wait long enough for all the threads to finish. */
+  msg("expected timer ticks: %d", 100 + thread_cnt * iterations * 10 + 100);
   timer_sleep (100 + thread_cnt * iterations * 10 + 100);
 
+  //msg("this should be thread 5: thread %d wakeup time: %d", threads[4].id, threads[4].time_to_wakeup)
   /* Acquire the output lock in case some rogue thread is still
      running. */
   lock_acquire (&test.output_lock);
 
   /* Print completion order. */
+  msg("wakeup checker");
+
   product = 0;
   for (op = output; op < test.output_pos; op++) 
     {
@@ -111,7 +116,7 @@ test_sleep (int thread_cnt, int iterations)
       t = threads + *op;
 
       new_prod = ++t->iterations * t->duration;
-        
+      
       msg ("thread %d: duration=%d, iteration=%d, product=%d",
            t->id, t->duration, t->iterations, new_prod);
       
@@ -121,12 +126,14 @@ test_sleep (int thread_cnt, int iterations)
         fail ("thread %d woke up out of order (%d > %d)!",
               t->id, product, new_prod);
     }
-
+  
   /* Verify that we had the proper number of wakeups. */
-  for (i = 0; i < thread_cnt; i++)
-    if (threads[i].iterations != iterations)
+  for (i = 0; i < thread_cnt; i++){
+    if (threads[i].iterations != iterations){
       fail ("thread %d woke up %d times instead of %d",
             i, threads[i].iterations, iterations);
+    }
+  }
   
   lock_release (&test.output_lock);
   free (output);
@@ -138,7 +145,11 @@ static void
 sleeper (void *t_) 
 {
   struct sleep_thread *t = t_;
-  struct sleep_test *test = t->test;
+  //test attribute = info shared between all threads 
+  //pass the info from the arg t to the sleep_test, which is information
+  //about the test, current start time of test and number of iterations 
+  //for each thread
+  struct sleep_test *test = t->test; 
   int i;
 
   for (i = 1; i <= test->iterations; i++) 

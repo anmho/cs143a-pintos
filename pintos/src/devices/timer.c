@@ -192,7 +192,7 @@ timer_wakeup(){
 
 
     //if it is time to wakeup unblock the thread in the sleep queue 
-    if (currThread->time_to_wakeup < current_time && currThread->time_to_wakeup == 0){
+    if (currThread->time_to_wakeup <= current_time){
 
       //always have to disable interrrupt before block/unblock
       enum intr_level prevLevel = intr_disable();
@@ -262,6 +262,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  //check if it is time to wake up every time tick increments
+  timer_wakeup();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
