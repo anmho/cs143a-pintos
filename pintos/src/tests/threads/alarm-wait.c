@@ -115,6 +115,7 @@ test_sleep (int thread_cnt, int iterations)
       ASSERT (*op >= 0 && *op < thread_cnt);
       t = threads + *op;
 
+      //
       new_prod = ++t->iterations * t->duration;
       
       msg ("thread %d: duration=%d, iteration=%d, product=%d",
@@ -123,7 +124,7 @@ test_sleep (int thread_cnt, int iterations)
       if (new_prod >= product)
         product = new_prod;
       else
-        fail ("thread %d woke up out of order (%d > %d)!",
+        fail ("thread %d woke up out of order (prod: %d > new prod: %d)!",
               t->id, product, new_prod);
     }
   

@@ -116,7 +116,7 @@ timer_sleep (int64_t ticks)
   int64_t start = timer_ticks ();
   
   //when the thread should wake up
-  int64_t wakeup_time = ticks + timer_ticks;
+  int64_t wakeup_time = ticks + start;
 
 
   ASSERT (intr_get_level () == INTR_ON);
@@ -129,10 +129,9 @@ timer_sleep (int64_t ticks)
   }
 
   struct thread *currThread = thread_current();
-
+  intr_disable();
   //gets the prev interrupt level before disable so that 
   //when you reenable the original interrupt level is restored
-  enum intr_level prevLevel = intr_disable();
 
   //stores the time when to wakeup on the curr thread 
   //so that it is saved while on the sleep queue
@@ -140,8 +139,7 @@ timer_sleep (int64_t ticks)
 
   list_insert_ordered(&sleep_queue, &currThread->elem, sleep_queue_less, NULL);
   thread_block();
-  intr_set_level(prevLevel);
-  
+  intr_enable();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -182,8 +180,31 @@ timer_wakeup(){
   //get the head of the list 
   struct list_elem *curr = list_begin(&sleep_queue);
 
-  //keep going to continously check if 
-  //a thread is ready to wakeup
+  // struct thread *highest_priority = NULL;
+
+  // //find the highest priority thread among those that are ready to wakeup
+  // while (curr != list_end(&sleep_queue)){
+  //   //have to store next because you remove curr 
+  //   struct list_elem *next = list_next(curr);
+
+  //   struct thread *currThread = list_entry(curr, struct thread, elem);
+
+  //   //first thread that is ready to wakeup 
+  //   //will have be the highest prio
+  //   if (currThread->time_to_wakeup <= current_time &&
+  //    (highest_priority == NULL || currThread->priority > highest_priority->priority))
+  //     highest_priority = currThread;
+
+  //   curr = next;
+
+  // }
+
+  // if (highest_priority != NULL){
+  //     enum intr_level prevLevel = intr_disable();
+  //     list_remove(curr);
+  //     thread_unblock(highest_priority);
+  //     intr_set_level(prevLevel);
+  // }
   while (curr != list_end(&sleep_queue)){
     //have to store next because you remove curr 
     struct list_elem *next = list_next(curr);
@@ -204,6 +225,7 @@ timer_wakeup(){
     curr = next;
 
   }
+
 }
 
 
