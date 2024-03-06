@@ -160,6 +160,8 @@ timer_sleep (int64_t ticks)
   intr_enable();
 }
 
+//
+
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
    turned on. */
 void
@@ -202,7 +204,7 @@ timer_wakeup(void){
     struct list_elem *next = list_next(curr);
 
     struct thread *currThread = list_entry(curr, struct thread, elem);
-
+ 
 
     //if it is time to wakeup unblock the thread in the sleep queue 
     if (currThread->time_to_wakeup <= current_time){
