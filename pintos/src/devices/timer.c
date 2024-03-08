@@ -135,10 +135,12 @@ timer_sleep (int64_t ticks)
   //when the thread should wake up
   int64_t wakeup_time = ticks + start;
 
+  //protects the sleep queue one thread can access at a time 
+  struct lock sleep_lock;
+  lock_init(&sleep_lock);
+  lock_acquire(&sleep_lock);
 
   ASSERT (intr_get_level () == INTR_ON);
-  // while (timer_elapsed (start) < ticks) 
-  //   thread_yield (); //thread is giving up its time on cpu to let other threads use it 
 
   //if it's already time to wakeup, then break 
   if (wakeup_time <= 0){
@@ -146,18 +148,16 @@ timer_sleep (int64_t ticks)
   }
 
   struct thread *currThread = thread_current();
-  intr_disable();
-  //gets the prev interrupt level before disable so that 
-  //when you reenable the original interrupt level is restored
+  enum intr_level prevLevel = intr_disable ();
 
-  //stores the time when to wakeup on the curr thread 
-  //so that it is saved while on the sleep queue
   currThread->time_to_wakeup =  wakeup_time;
   //printf("assigned wakeup time :  %d\n", currThread->time_to_wakeup);
   list_insert_ordered(&sleep_queue, &currThread->elem, sleep_queue_less, NULL);
   //print_sleep_queue();
   thread_block();
-  intr_enable();
+  intr_set_level (prevLevel);
+
+  lock_release (&sleep_lock);
 }
 
 //
@@ -195,6 +195,9 @@ timer_wakeup(void){
   if (list_empty(&sleep_queue)){
     return;
   }
+
+  list_sort(&sleep_queue, sleep_queue_less, 0);
+  
 
   //get the head of the list 
   struct list_elem *curr = list_begin(&sleep_queue);
